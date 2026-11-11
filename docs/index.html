@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GoldenHour — the exact hour the light turns to gold</title>
+<meta name="description" content="Golden-hour and blue-hour times for your city, with a cloud-cover shoot-quality score. Live sun data from sunrise-sunset.org, live cloud data from Open-Meteo.">
+<style>
+  :root{
+    --base:#0B0B16; --surface:#17172A; --surface2:#1F1F38; --line:#2A2A45;
+    --ink:#F5F1E8; --muted:#9C9CB4; --gold:#F59E0B; --gold-soft:#FBBF24;
+    --blue:#818CF8; --blue-soft:#A5B4FC; --day:#E8DCC8;
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--base);color:var(--ink);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55;-webkit-font-smoothing:antialiased}
+  a{color:var(--gold-soft)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px 64px}
+  /* nav */
+  nav{display:flex;align-items:center;justify-content:space-between;padding:18px 0;gap:16px;flex-wrap:wrap}
+  .wordmark{font-weight:800;font-size:20px;letter-spacing:-.02em;text-decoration:none;color:var(--ink)}
+  .wordmark b{color:var(--gold)}
+  .navlinks{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .pill{display:inline-block;padding:7px 14px;border:1px solid var(--line);border-radius:999px;
+    color:var(--ink);text-decoration:none;font-size:13.5px;background:var(--surface)}
+  .pill:hover{border-color:var(--gold)}
+  .pill.cta{background:var(--gold);border-color:var(--gold);color:#1A1206;font-weight:700}
+  .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#34D399;margin-right:6px;vertical-align:1px}
+  .live-dot.off{background:#F87171}
+  /* hero */
+  .badge-row{display:flex;gap:8px;flex-wrap:wrap;margin:26px 0 14px}
+  .badge{font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);
+    border:1px solid var(--line);border-radius:999px;padding:5px 11px;background:var(--surface)}
+  .badge.gold{color:var(--gold-soft);border-color:rgba(245,158,11,.45)}
+  h1{font-size:clamp(38px,6.4vw,72px);line-height:1.02;letter-spacing:-.03em;margin:0 0 14px;font-weight:800}
+  h1 .gold{color:var(--gold)}
+  h1 .blue{color:var(--blue-soft)}
+  .lede{font-size:17px;color:var(--muted);max-width:640px;margin:0 0 26px}
+  .lede b{color:var(--ink)}
+  /* controls */
+  .controls{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  select,input[type="date"],input[type="text"],input[type="number"]{
+    background:var(--surface2);color:var(--ink);border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px;font-size:15px;font-family:inherit;min-width:0}
+  select:focus,input:focus{outline:2px solid var(--gold);outline-offset:1px}
+  button{cursor:pointer;font-family:inherit}
+  .btn{background:var(--gold);color:#1A1206;border:0;border-radius:10px;padding:11px 18px;
+    font-size:15px;font-weight:700}
+  .btn:hover{background:var(--gold-soft)}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:600}
+  .btn.ghost:hover{border-color:var(--gold)}
+  .status{font-size:14px;color:var(--muted);margin:14px 2px 0;min-height:21px}
+  .status.error{color:#FCA5A5}
+  /* sun arc */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px;margin-top:22px}
+  .panel h2{margin:0 0 4px;font-size:20px;letter-spacing:-.01em}
+  .panel .sub{color:var(--muted);font-size:14px;margin:0 0 8px}
+  .arc-wrap{position:relative}
+  .arc-wrap svg{width:100%;height:auto;display:block}
+  .sun-label{font-size:13px;fill:var(--muted)}
+  .sun-label b{fill:var(--ink);font-size:15px}
+  #sunMarker{transition:cx 1.2s cubic-bezier(.34,1.4,.44,1),cy 1.2s cubic-bezier(.34,1.4,.44,1)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:6px}
+  .stat{background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .stat .k{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  .stat .v{font-size:26px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+  .stat .v small{font-size:14px;font-weight:600;color:var(--muted)}
+  /* timeline */
+  .timeline{position:relative;height:34px;border-radius:999px;overflow:hidden;margin:18px 0 6px;
+    border:1px solid var(--line);display:flex}
+  .seg{height:100%}
+  .seg.night{background:#101024}
+  .seg.blue{background:rgba(129,140,248,.55)}
+  .seg.gold{background:var(--gold)}
+  .seg.day{background:rgba(232,220,200,.28)}
+  .now-marker{position:absolute;top:-4px;bottom:-4px;width:2px;background:#fff;box-shadow:0 0 8px rgba(255,255,255,.8)}
+  .now-label{position:absolute;top:-24px;transform:translateX(-50%);font-size:12px;color:#fff;
+    background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);padding:1px 8px;border-radius:999px;white-space:nowrap}
+  .tl-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:26px}
+  .tl-legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  /* windows */
+  .windows{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px}
+  .window{background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:16px;
+    transition:transform .25s cubic-bezier(.34,1.4,.44,1),border-color .25s}
+  .window:hover{transform:translateY(-2px)}
+  .window.golden{border-top:3px solid var(--gold)}
+  .window.blue{border-top:3px solid var(--blue)}
+  .window .k{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  .window .t{font-size:21px;font-weight:800;letter-spacing:-.01em;margin:6px 0 2px}
+  .window .q{font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+  .window .q small{font-size:15px;color:var(--muted);font-weight:600}
+  .window.golden .q{color:var(--gold-soft)}
+  .window.blue .q{color:var(--blue-soft)}
+  .verdict{display:inline-block;margin-top:6px;font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:999px}
+  .verdict.superb{background:rgba(52,211,153,.16);color:#6EE7B7}
+  .verdict.great{background:rgba(245,158,11,.16);color:var(--gold-soft)}
+  .verdict.fair{background:rgba(232,220,200,.14);color:var(--day)}
+  .verdict.poor{background:rgba(248,113,113,.16);color:#FCA5A5}
+  .verdict.skip{background:rgba(248,113,113,.22);color:#F87171}
+  .verdict.none{background:rgba(156,156,180,.16);color:var(--muted)}
+  .window .cloud{font-size:13px;color:var(--muted);margin-top:8px}
+  .best-note{margin-top:14px;font-size:15px}
+  .best-note b{color:var(--gold-soft)}
+  /* week strip */
+  .week{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-top:14px}
+  .day{background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:12px;
+    cursor:pointer;text-align:left;color:var(--ink);font-family:inherit}
+  .day:hover{border-color:var(--gold)}
+  .day.active{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+  .day .d{font-size:13px;font-weight:700}
+  .day .s{font-size:12px;color:var(--muted);margin-top:2px}
+  .day .bw{font-size:12.5px;margin-top:8px;line-height:1.4;min-height:34px}
+  .day .qbar{height:6px;border-radius:99px;background:var(--line);margin-top:8px;overflow:hidden}
+  .day .qbar i{display:block;height:100%;background:var(--gold);border-radius:99px;
+    transition:width .8s cubic-bezier(.34,1.3,.44,1)}
+  .day .qv{font-size:12.5px;font-weight:700;margin-top:5px}
+  /* cloud chart */
+  .cloud-chart{display:flex;align-items:flex-end;gap:3px;height:120px;margin-top:16px}
+  .cloud-chart .bar{flex:1;background:#3A3A58;border-radius:3px 3px 0 0;min-height:2px;position:relative;
+    transition:height .6s cubic-bezier(.34,1.3,.44,1)}
+  .cloud-chart .bar.gold{background:var(--gold)}
+  .cloud-chart .bar.blue{background:var(--blue)}
+  .cloud-x{display:flex;gap:3px;margin-top:6px}
+  .cloud-x span{flex:1;text-align:center;font-size:11px;color:var(--muted)}
+  /* footer */
+  footer{margin-top:34px;border-top:1px solid var(--line);padding-top:20px;color:var(--muted);font-size:13.5px}
+  footer p{margin:6px 0}
+  .hidden{display:none!important}
+  @media (max-width:860px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .windows{grid-template-columns:repeat(2,1fr)}
+    .week{grid-template-columns:repeat(2,1fr)}
+  }
+  @media (max-width:520px){
+    .windows{grid-template-columns:1fr}
+    .week{grid-template-columns:repeat(2,1fr)}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <a class="wordmark" href="./">Golden<b>Hour</b></a>
+    <div class="navlinks">
+      <span class="pill"><span class="live-dot" id="liveDot"></span><span id="liveLabel">Live data</span></span>
+      <a class="pill" href="https://github.com/judd69/goldenhour">GitHub repo</a>
+      <a class="pill cta" href="#planner">Plan a shoot</a>
+    </div>
+  </nav>
+
+  <div class="badge-row">
+    <span class="badge gold">Golden hour · Blue hour</span>
+    <span class="badge">Sun data · sunrise-sunset.org</span>
+    <span class="badge">Cloud data · Open-Meteo</span>
+    <span class="badge">Free · Keyless · No account</span>
+  </div>
+
+  <h1 id="heroTitle">The light turns to <span class="gold">gold</span> at <span id="heroTime">…</span>.</h1>
+  <p class="lede" id="heroLede">Golden hour is the hour after sunrise and the hour before sunset — plus the
+    blue hour either side. Pick a place and a date: GoldenHour gives you the exact
+    minutes, and a cloud-cover score for whether the light is worth going out for.</p>
+
+  <div class="controls" id="planner">
+    <div class="field" style="flex:1;min-width:180px">
+      <label for="city">Place</label>
+      <select id="city"></select>
+    </div>
+    <div class="field">
+      <label for="date">Date</label>
+      <input type="date" id="date">
+    </div>
+    <div class="field" style="flex:1;min-width:200px">
+      <label for="search">Or search any place</label>
+      <input type="text" id="search" placeholder="e.g. Varanasi ghats, Hampi…" autocomplete="off">
+    </div>
+    <button class="btn" id="searchBtn" type="button">Find place</button>
+    <button class="btn ghost" id="geoBtn" type="button">Use my location</button>
+  </div>
+  <p class="status" id="status">Fetching live sun + cloud data…</p>
+
+  <section class="panel" id="sunPanel">
+    <h2 id="placeTitle">Mumbai — today</h2>
+    <p class="sub" id="placeSub">Sun path, schematic — the sun marker shows where the sun is right now.</p>
+    <div class="arc-wrap">
+      <svg viewBox="0 0 800 330" role="img" aria-label="Sun path arc from sunrise to sunset">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#17172A"/>
+            <stop offset=".62" stop-color="#2A1E3F"/>
+            <stop offset="1" stop-color="#4A2E1A"/>
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="800" height="330" rx="14" fill="url(#sky)"/>
+        <g fill="#F5F1E8" opacity=".5">
+          <circle cx="90" cy="46" r="1.6"/><circle cx="180" cy="28" r="1.2"/><circle cx="640" cy="36" r="1.6"/>
+          <circle cx="720" cy="70" r="1.2"/><circle cx="330" cy="22" r="1.2"/><circle cx="520" cy="18" r="1.4"/>
+        </g>
+        <path d="M 80 300 A 320 320 0 0 1 720 300" fill="none" stroke="#3A3A58" stroke-width="2" stroke-dasharray="5 6"/>
+        <line x1="40" y1="300" x2="760" y2="300" stroke="#2A2A45" stroke-width="2"/>
+        <circle id="sunMarker" cx="80" cy="300" r="13" fill="#F59E0B"/>
+        <circle id="sunHalo" cx="80" cy="300" r="22" fill="#F59E0B" opacity=".18"/>
+        <text class="sun-label" x="80" y="325" text-anchor="middle">Sunrise <b id="arcSunrise">—</b></text>
+        <text class="sun-label" x="400" y="30" text-anchor="middle">Solar noon <b id="arcNoon">—</b></text>
+        <text class="sun-label" x="720" y="325" text-anchor="middle">Sunset <b id="arcSunset">—</b></text>
+      </svg>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="k">Sunrise</div><div class="v" id="statSunrise">—</div></div>
+      <div class="stat"><div class="k">Sunset</div><div class="v" id="statSunset">—</div></div>
+      <div class="stat"><div class="k">Solar noon</div><div class="v" id="statNoon">—</div></div>
+      <div class="stat"><div class="k">Day length</div><div class="v" id="statDay">—</div></div>
+    </div>
+    <div style="height:30px"></div>
+    <div class="timeline" id="timeline"></div>
+    <div class="tl-legend">
+      <span><i style="background:#101024;border:1px solid #2A2A45"></i>Night</span>
+      <span><i style="background:rgba(129,140,248,.55)"></i>Blue hour</span>
+      <span><i style="background:#F59E0B"></i>Golden hour</span>
+      <span><i style="background:rgba(232,220,200,.28)"></i>Daylight</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Today's light, scored</h2>
+    <p class="sub">Quality is an estimate from cloud cover only — 100 minus the average cloud %
+      across the window. It says nothing about haze, dust, or pollution.</p>
+    <div class="windows" id="windows"></div>
+    <p class="best-note" id="bestNote"></p>
+  </section>
+
+  <section class="panel">
+    <h2>Next 7 days</h2>
+    <p class="sub">Best window each day, from today. Tap a day to plan it.</p>
+    <div class="week" id="week"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Cloud cover today</h2>
+    <p class="sub" id="cloudSub">Hourly cloud cover, Open-Meteo. Amber bars fall inside a golden hour; periwinkle bars inside a blue hour.</p>
+    <div class="cloud-chart" id="cloudChart"></div>
+    <div class="cloud-x" id="cloudX"></div>
+  </section>
+
+  <footer>
+    <p><b style="color:var(--ink)">Honest data.</b> Sun times are the live sunrise-sunset.org reading for
+      this place and date. Golden hour is sunrise → +60 min and sunset −60 min → sunset;
+      blue hour is civil twilight ↔ sunrise/sunset — standard definitions, not a guarantee
+      of good light. The quality score comes only from Open-Meteo hourly cloud cover; a
+      clear sky can still be hazy. If either API is unreachable, this page says so instead
+      of showing invented times.</p>
+    <p>Sun data: <a href="https://sunrise-sunset.org/">sunrise-sunset.org</a> ·
+      Cloud data: <a href="https://open-meteo.com/">Open-Meteo</a> ·
+      Code + CLI: <a href="https://github.com/judd69/goldenhour">github.com/judd69/goldenhour</a> ·
+      Built by <a href="https://github.com/judd69">Jude Davies</a> — MIT licence.</p>
+  </footer>
+</div>
+<script>
+"use strict";
+/* GoldenHour dashboard — calls sunrise-sunset.org + Open-Meteo directly
+   from the browser. No keys, no server, no invented data: if a fetch
+   fails, the page says so. */
+const SUN_API = "https://api.sunrise-sunset.org/json";
+const OM_API = "https://api.open-meteo.com/v1/forecast";
+const GEO_API = "https://geocoding-api.open-meteo.com/v1/search";
+
+const CITIES = [
+  ["Mumbai",19.0760,72.8777],["Delhi",28.6139,77.2090],["Bengaluru",12.9716,77.5946],
+  ["Chennai",13.0827,80.2707],["Kolkata",22.5726,88.3639],["Hyderabad",17.3850,78.4867],
+  ["Pune",18.5204,73.8567],["Jaipur",26.9124,75.7873],["Udaipur",24.5854,73.7125],
+  ["Goa",15.4909,73.8278],["Varanasi",25.3176,82.9739],["Kochi",9.9312,76.2673],
+  ["Ahmedabad",23.0225,72.5714],["Leh",34.1526,77.5770],["Shimla",31.1048,77.1734],
+  ["Amritsar",31.6340,74.8723],["Darjeeling",27.0410,88.2663],["Ooty",11.4102,76.6950],
+  ["Rishikesh",30.0869,78.2676],["Hampi",15.3350,76.4600]
+];
+
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, "0");
+const fmtMin = m => pad(Math.floor(m / 60)) + ":" + pad(m % 60);
+const fmtDate = d => d.toLocaleDateString("en-GB", {weekday:"short", day:"numeric", month:"short", year:"numeric"});
+const todayStr = () => { const d = new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); };
+const addDays = (iso, n) => { const d = new Date(iso+"T12:00:00"); d.setDate(d.getDate()+n);
+  return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); };
+
+/* --- state from the URL, so plans are shareable: ?city=Mumbai&date=… or ?lat=&lon= --- */
+const params = new URLSearchParams(location.search);
+let place = {name:"Mumbai", lat:19.0760, lon:72.8777};
+if (params.get("lat") && params.get("lon")) {
+  place = {name: params.get("city") || (+params.get("lat")).toFixed(4)+", "+(+params.get("lon")).toFixed(4),
+           lat:+params.get("lat"), lon:+params.get("lon")};
+} else if (params.get("city")) {
+  const hit = CITIES.find(c => c[0].toLowerCase() === params.get("city").toLowerCase());
+  if (hit) place = {name:hit[0], lat:hit[1], lon:hit[2]};
+}
+let date = params.get("date") || todayStr();
+let offsetSec = 19800; // filled in from Open-Meteo; Asia/Kolkata default
+let sunCache = {}, cloudCache = null, weekSun = [];
+
+function verdictFor(q){
+  if (q == null) return ["No cloud data","none"];
+  if (q >= 90) return ["Superb","superb"];
+  if (q >= 75) return ["Great","great"];
+  if (q >= 55) return ["Fair","fair"];
+  if (q >= 35) return ["Poor","poor"];
+  return ["Skip","skip"];
+}
+/* UTC instant -> minutes since local midnight, using the place's UTC offset. */
+function toLocalMin(iso){
+  const ms = Date.parse(iso) + offsetSec*1000;
+  const d = new Date(ms);
+  return d.getUTCHours()*60 + d.getUTCMinutes();
+}
+function windowsFor(sun, cloudHours){
+  // cloudHours: [{min: minutes-of-day, cloud: %}...] for this date, or null
+  const sr = toLocalMin(sun.sunrise), ss = toLocalMin(sun.sunset);
+  const cb = toLocalMin(sun.civil_twilight_begin), ce = toLocalMin(sun.civil_twilight_end);
+  const defs = [
+    {kind:"morning-blue", label:"Morning blue hour", start:cb, end:sr, cls:"blue"},
+    {kind:"morning-golden", label:"Morning golden hour", start:sr, end:sr+60, cls:"golden"},
+    {kind:"evening-golden", label:"Evening golden hour", start:ss-60, end:ss, cls:"golden"},
+    {kind:"evening-blue", label:"Evening blue hour", start:ss, end:ce, cls:"blue"}
+  ];
+  return defs.map(w => {
+    let quality = null, cloud = null;
+    if (cloudHours){
+      let sum = 0, n = 0;
+      for (const h of cloudHours){
+        if (h.min < w.end && h.min + 60 > w.start){ sum += h.cloud; n++; }
+      }
+      if (n){ cloud = sum/n; quality = Math.round(100 - cloud); }
+    }
+    return {...w, quality, cloud};
+  });
+}
+function bestOf(windows){
+  const rank = {"evening-golden":0,"morning-golden":1,"evening-blue":2,"morning-blue":3};
+  let best = null;
+  for (const w of windows){
+    if (w.quality == null) continue;
+    if (!best || w.quality > best.quality ||
+        (w.quality === best.quality && rank[w.kind] < rank[best.kind])) best = w;
+  }
+  return best;
+}
+
+async function fetchJSON(url){
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+async function loadDay(d){
+  if (!sunCache[d]){
+    const j = await fetchJSON(`${SUN_API}?lat=${place.lat}&lng=${place.lon}&date=${d}&formatted=0`);
+    if (j.status !== "OK") throw new Error("sunrise-sunset.org: " + j.status);
+    sunCache[d] = j.results;
+  }
+  return sunCache[d];
+}
+async function loadCloud(){
+  if (cloudCache) return cloudCache;
+  const j = await fetchJSON(`${OM_API}?latitude=${place.lat}&longitude=${place.lon}&hourly=cloud_cover&forecast_days=7&timezone=auto`);
+  offsetSec = j.utc_offset_seconds;
+  cloudCache = j.hourly;
+  return cloudCache;
+}
+function cloudForDate(iso){
+  if (!cloudCache) return null;
+  const out = [];
+  for (let i = 0; i < cloudCache.time.length; i++){
+    if (cloudCache.time[i].startsWith(iso)){
+      const hh = +cloudCache.time[i].slice(11,13);
+      out.push({min: hh*60, cloud: cloudCache.cloud_cover[i]});
+    }
+  }
+  return out.length ? out : null;
+}
+
+function renderSun(sun, windows){
+  const sr = toLocalMin(sun.sunrise), ss = toLocalMin(sun.sunset), noon = toLocalMin(sun.solar_noon);
+  $("placeTitle").textContent = place.name + " — " + fmtDate(new Date(date+"T12:00:00"));
+  $("arcSunrise").textContent = fmtMin(sr);
+  $("arcNoon").textContent = fmtMin(noon);
+  $("arcSunset").textContent = fmtMin(ss);
+  $("statSunrise").textContent = fmtMin(sr);
+  $("statSunset").textContent = fmtMin(ss);
+  $("statNoon").textContent = fmtMin(noon);
+  const dl = sun.day_length;
+  $("statDay").innerHTML = Math.floor(dl/3600) + "h " + pad(Math.floor(dl%3600/60)) + "m";
+  // Sun marker glides along the arc (short spring, tiny overshoot).
+  const now = new Date();
+  const nowMin = now.getUTCHours()*60 + now.getUTCMinutes() + offsetSec/60;
+  const isToday = date === todayStr();
+  let f = isToday ? (nowMin - sr) / (ss - sr) : 0.5;
+  const up = isToday && nowMin >= sr && nowMin <= ss;
+  const cx = 400, cy = 300, r = 320;
+  const a = Math.PI * (1 - Math.max(0, Math.min(1, f)));
+  const x = cx + r * Math.cos(a), y = up ? cy - r * Math.sin(a) : cy;
+  const marker = $("sunMarker"), halo = $("sunHalo");
+  marker.setAttribute("cx", x.toFixed(1)); marker.setAttribute("cy", y.toFixed(1));
+  halo.setAttribute("cx", x.toFixed(1)); halo.setAttribute("cy", y.toFixed(1));
+  marker.setAttribute("fill", up ? "#F59E0B" : "#5B5B7A");
+  halo.setAttribute("opacity", up ? ".18" : ".05");
+  $("placeSub").textContent = isToday
+    ? (up ? "Sun path, schematic — the sun is up now, marker shows where it is."
+          : "Sun path, schematic — the sun is down now; tomorrow's first light is at " + fmtMin(sr) + ".")
+    : "Sun path, schematic — for " + fmtDate(new Date(date+"T12:00:00")) + ".";
+  // Hero: the evening golden hour is the headline.
+  const ev = windows.find(w => w.kind === "evening-golden");
+  $("heroTime").textContent = fmtMin(ev.start);
+  $("heroLede").innerHTML = "In " + place.name + " on " + fmtDate(new Date(date+"T12:00:00")) +
+    ", the sun rises at <b>" + fmtMin(sr) + "</b> and sets at <b>" + fmtMin(ss) + "</b>. " +
+    "The evening golden hour runs <b>" + fmtMin(ev.start) + "–" + fmtMin(ev.end) + "</b>" +
+    (ev.quality != null ? ", scored <b>" + ev.quality + "/100 (" + verdictFor(ev.quality)[0] + ")</b> on cloud cover." : ".");
+  // Timeline bar.
+  const segs = [
+    [0, toLocalMin(sun.civil_twilight_begin), "night"],
+    [toLocalMin(sun.civil_twilight_begin), sr, "blue"],
+    [sr, sr+60, "gold"], [sr+60, ss-60, "day"], [ss-60, ss, "gold"],
+    [ss, toLocalMin(sun.civil_twilight_end), "blue"],
+    [toLocalMin(sun.civil_twilight_end), 1440, "night"]
+  ];
+  const tl = $("timeline"); tl.innerHTML = "";
+  for (const [a2,b2,cls] of segs){
+    if (b2 <= a2) continue;
+    const div = document.createElement("div");
+    div.className = "seg " + cls;
+    div.style.width = ((b2-a2)/1440*100) + "%";
+    tl.appendChild(div);
+  }
+  if (isToday){
+    const m = document.createElement("div");
+    m.className = "now-marker"; m.style.left = (nowMin/1440*100) + "%";
+    const lab = document.createElement("div");
+    lab.className = "now-label"; lab.style.left = (nowMin/1440*100) + "%";
+    lab.textContent = "now " + fmtMin(Math.round(nowMin));
+    tl.appendChild(m); tl.appendChild(lab);
+  }
+}
+function renderWindows(windows){
+  const box = $("windows"); box.innerHTML = "";
+  for (const w of windows){
+    const [verdict, cls] = verdictFor(w.quality);
+    const div = document.createElement("div");
+    div.className = "window " + w.cls;
+    div.innerHTML = `<div class="k">${w.label}</div>
+      <div class="t">${fmtMin(w.start)}–${fmtMin(w.end)}</div>
+      <div class="q">${w.quality == null ? "—" : w.quality}<small>/100</small></div>
+      <span class="verdict ${cls}">${verdict}</span>
+      <div class="cloud">${w.cloud == null ? "No cloud data for this date — the score needs an Open-Meteo forecast (today + 6 days)." : "Avg cloud " + Math.round(w.cloud) + "% across the window."}</div>`;
+    box.appendChild(div);
+  }
+  const best = bestOf(windows);
+  $("bestNote").innerHTML = best
+    ? `Best light: <b>${best.label.toLowerCase()} ${fmtMin(best.start)}–${fmtMin(best.end)}</b>, quality ${best.quality}/100 (${verdictFor(best.quality)[0]}).`
+    : "No cloud data for this date, so no score — sun times above are still the live reading.";
+}
+function renderCloud(cloudHours, windows){
+  const chart = $("cloudChart"), xs = $("cloudX");
+  chart.innerHTML = ""; xs.innerHTML = "";
+  if (!cloudHours){
+    $("cloudSub").textContent = "No Open-Meteo cloud forecast for this date (forecast covers today + 6 days). Sun times above are still live.";
+    return;
+  }
+  $("cloudSub").textContent = "Hourly cloud cover, Open-Meteo. Amber bars fall inside a golden hour; periwinkle bars inside a blue hour.";
+  const inWin = (h, kind) => windows.some(w => w.kind.includes(kind) && h >= w.start && h < w.end);
+  for (let h = 0; h < 24; h++){
+    const c = cloudHours.find(x => x.min === h*60);
+    const v = c ? c.cloud : 0;
+    const bar = document.createElement("div");
+    bar.className = "bar" + (inWin(h*60, "golden") ? " gold" : inWin(h*60, "blue") ? " blue" : "");
+    bar.style.height = Math.max(2, v) + "%";
+    bar.title = pad(h) + ":00 — " + v + "% cloud";
+    chart.appendChild(bar);
+    const lab = document.createElement("span");
+    lab.textContent = h % 3 === 0 ? pad(h) + ":00" : "";
+    xs.appendChild(lab);
+  }
+}
+async function renderWeek(){
+  const box = $("week"); box.innerHTML = "";
+  const t = todayStr();
+  for (let i = 0; i < 7; i++){
+    const d = addDays(t, i);
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "day" + (d === date ? " active" : "");
+    btn.innerHTML = `<div class="d">${new Date(d+"T12:00:00").toLocaleDateString("en-GB",{weekday:"short"})}</div>
+      <div class="s">${new Date(d+"T12:00:00").toLocaleDateString("en-GB",{day:"numeric", month:"short"})}</div>
+      <div class="bw">Loading…</div><div class="qbar"><i style="width:0%"></i></div><div class="qv"></div>`;
+    btn.onclick = () => { date = d; $("date").value = d; refresh(false); };
+    box.appendChild(btn);
+    try {
+      const sun = await loadDay(d);
+      const w = windowsFor(sun, cloudForDate(d));
+      const best = bestOf(w);
+      btn.querySelector(".bw").textContent = best
+        ? best.label.replace(" hour","") + " " + fmtMin(best.start) + "–" + fmtMin(best.end)
+        : "Sun " + fmtMin(toLocalMin(sun.sunrise)) + "–" + fmtMin(toLocalMin(sun.sunset));
+      btn.querySelector(".qbar i").style.width = (best ? best.quality : 0) + "%";
+      btn.querySelector(".qv").textContent = best ? best.quality + "/100 · " + verdictFor(best.quality)[0] : "No cloud data";
+    } catch (e){
+      btn.querySelector(".bw").textContent = "Could not load";
+    }
+  }
+}
+async function refresh(rebuildWeek){
+  $("status").textContent = "Fetching live sun + cloud data…";
+  $("liveDot").className = "live-dot"; $("liveLabel").textContent = "Live data";
+  try {
+    const cloud = await loadCloud();
+    const sun = await loadDay(date);
+    const windows = windowsFor(sun, cloudForDate(date));
+    renderSun(sun, windows);
+    renderWindows(windows);
+    renderCloud(cloudForDate(date), windows);
+    $("status").textContent = "Live: sunrise-sunset.org + Open-Meteo · " + place.name + " · " + fmtDate(new Date(date+"T12:00:00")) + " · refreshed " + new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+    if (rebuildWeek) renderWeek();
+  } catch (e){
+    $("status").textContent = "Could not reach the live APIs (" + e.message + "). GoldenHour shows no invented times — check your connection and retry.";
+    $("status").classList.add("error");
+    $("liveDot").className = "live-dot off"; $("liveLabel").textContent = "Offline";
+  }
+  const url = new URL(location);
+  url.searchParams.set("city", place.name);
+  url.searchParams.set("lat", place.lat); url.searchParams.set("lon", place.lon);
+  url.searchParams.set("date", date);
+  history.replaceState(null, "", url);
+}
+
+/* --- controls --- */
+const citySel = $("city");
+for (const [name] of CITIES){
+  const o = document.createElement("option"); o.value = name; o.textContent = name;
+  citySel.appendChild(o);
+}
+citySel.value = place.name;
+$("date").value = date;
+$("date").min = "2020-01-01";
+citySel.onchange = () => {
+  const hit = CITIES.find(c => c[0] === citySel.value);
+  if (hit){ place = {name:hit[0], lat:hit[1], lon:hit[2]}; sunCache = {}; cloudCache = null; refresh(true); }
+};
+$("date").onchange = () => { date = $("date").value || todayStr(); refresh(false); };
+$("searchBtn").onclick = async () => {
+  const q = $("search").value.trim();
+  if (!q) return;
+  $("status").textContent = "Searching for “" + q + "”…";
+  try {
+    const j = await fetchJSON(`${GEO_API}?name=${encodeURIComponent(q)}&count=1`);
+    if (!j.results || !j.results.length) throw new Error("no match");
+    const r = j.results[0];
+    place = {name: r.name + (r.country ? ", " + r.country : ""), lat: r.latitude, lon: r.longitude};
+    sunCache = {}; cloudCache = null;
+    refresh(true);
+  } catch (e){ $("status").textContent = "Could not find “" + q + "” — try a city name."; $("status").classList.add("error"); }
+};
+$("geoBtn").onclick = () => {
+  if (!navigator.geolocation){ $("status").textContent = "Geolocation is not available in this browser."; return; }
+  $("status").textContent = "Locating you…";
+  navigator.geolocation.getCurrentPosition(pos => {
+    place = {name:"Your location", lat:+pos.coords.latitude.toFixed(4), lon:+pos.coords.longitude.toFixed(4)};
+    sunCache = {}; cloudCache = null;
+    refresh(true);
+  }, () => { $("status").textContent = "Location permission denied — pick a city instead."; });
+};
+setInterval(() => refresh(false), 30*60*1000);
+refresh(true);
+</script>
+</body>
+</html>
